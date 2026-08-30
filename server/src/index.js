@@ -114,3 +114,5 @@ function shutdown(signal) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('unhandledRejection', (reason) => logger.error('unhandledRejection', { reason: String(reason) }));
+
+module.exports = app;
