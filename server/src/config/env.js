@@ -23,6 +23,19 @@ const schema = z.object({
     .default('http://localhost:5173')
     .transform((v) => v.split(',').map((s) => s.trim()).filter(Boolean)),
 
+  /**
+   * Vercel her dagitimda yeni bir *.vercel.app adresi uretir; bunlari elle
+   * CORS_ORIGINS'e eklemek surdurulebilir degil. Bu bayrak aciksa
+   * https://<herhangi>.vercel.app adreslerine izin verilir.
+   *
+   * Kendi ozel alan adinizla yayina aldiktan sonra `false` yapip yalnizca
+   * CORS_ORIGINS listesini kullanmaniz onerilir.
+   *
+   * NOT: Ayni kaynak (frontend + API ayni alan adi) istekleri bu bayraktan
+   * BAGIMSIZ olarak zaten kabul edilir.
+   */
+  CORS_ALLOW_VERCEL: boolish(true),
+
   TRENDYOL_SELLER_ID: z.string().min(1, 'TRENDYOL_SELLER_ID zorunlu'),
   TRENDYOL_API_KEY: z.string().min(1, 'TRENDYOL_API_KEY zorunlu'),
   TRENDYOL_API_SECRET: z.string().min(1, 'TRENDYOL_API_SECRET zorunlu'),

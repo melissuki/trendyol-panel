@@ -36,31 +36,86 @@ app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }));
 
 /**
- * SIKI CORS
- * Sadece .env icinde tanimli originlere izin verilir. Origin basligi olmayan
- * istekler (curl, sunucu-sunucu) tarayici disidir; sadece gelistirmede serbest.
- * Content-Disposition expose edilir ki frontend dosya adini okuyabilsin.
+ * CORS - KENDINI YAPILANDIRAN
+ * =============================================================================
+ * Vercel'de frontend ve API AYNI alan adinda calisir, dolayisiyla aslinda
+ * CORS'a hic gerek yoktur. Ancak tarayici POST isteklerinde ayni kaynakta bile
+ * `Origin` basligi gonderir; eski kod bunu listede bulamayinca 403 donuyordu.
+ *
+ * Ayrica Vercel HER DAGITIMDA yeni bir alan adi uretir
+ * (trendyol-panel-dk52latws-melissuky.vercel.app gibi), bu yuzden alan adini
+ * elle .env'ye yazmak surdurulebilir degildir.
+ *
+ * Izin kurallari (sirayla):
+ *   1) Origin YOK            -> izin ver (curl / sunucu-sunucu; CORS basligi gerekmez)
+ *   2) Origin == istegin kendi host'u -> AYNI KAYNAK, izin ver (yapilandirma gerekmez)
+ *   3) CORS_ORIGINS listesinde -> izin ver
+ *   4) *.vercel.app onizleme adresi ve CORS_ALLOW_VERCEL=true -> izin ver
+ *   5) aksi halde -> 403
  */
-const corsOptions = {
-  origin(origin, callback) {
-    if (!origin) return callback(null, !isProd);
-    if (env.CORS_ORIGINS.includes(origin)) return callback(null, true);
-    logger.warn('CORS reddedildi', { origin });
+const VERCEL_HOST_RE = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i;
+
+/** Istegin gercek host'u (Vercel proxy arkasinda x-forwarded-host gelir). */
+function requestHost(req) {
+  return String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '').toLowerCase();
+}
+
+function isOriginAllowed(origin, req) {
+  if (!origin) return { allowed: true, reason: 'origin-yok' };
+
+  let originHost = '';
+  try {
+    originHost = new URL(origin).host.toLowerCase();
+  } catch {
+    return { allowed: false, reason: 'gecersiz-origin' };
+  }
+
+  // 2) Ayni kaynak: frontend ve API ayni alan adinda (Vercel dagitimi)
+  if (originHost && originHost === requestHost(req)) return { allowed: true, reason: 'ayni-kaynak' };
+
+  // 3) Acikca izin verilen originler
+  if (env.CORS_ORIGINS.includes(origin)) return { allowed: true, reason: 'listede' };
+
+  // 4) Vercel onizleme adresleri (her dagitimda degistigi icin kalip ile)
+  if (env.CORS_ALLOW_VERCEL && VERCEL_HOST_RE.test(origin)) {
+    return { allowed: true, reason: 'vercel-onizleme' };
+  }
+
+  return { allowed: false, reason: 'izin-yok' };
+}
+
+/**
+ * cors() secenekleri istek bazinda hesaplanir - boylece `req` uzerinden
+ * ayni-kaynak kontrolu yapabiliyoruz (sabit secenek nesnesiyle mumkun degil).
+ */
+const corsDelegate = (req, callback) => {
+  const origin = req.headers.origin;
+  const { allowed, reason } = isOriginAllowed(origin, req);
+
+  if (!allowed) {
+    logger.warn('CORS reddedildi', { origin, host: requestHost(req), reason });
     return callback(
-      new AppError(`CORS politikası bu kaynağa izin vermiyor: ${origin}`, {
-        status: 403,
-        code: 'CORS_FORBIDDEN',
-      }),
+      new AppError(
+        `CORS politikası bu kaynağa izin vermiyor: ${origin}. ` +
+          'Sunucudaki CORS_ORIGINS değerine bu adresi ekleyin.',
+        { status: 403, code: 'CORS_FORBIDDEN' },
+      ),
     );
-  },
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
-  exposedHeaders: ['Content-Disposition', 'X-Report-Rows'],
-  credentials: false,
-  maxAge: 600,
+  }
+
+  return callback(null, {
+    // Origin yoksa CORS basligina gerek yok; varsa yalnizca o origin'e izin ver
+    origin: origin ?? false,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
+    exposedHeaders: ['Content-Disposition', 'X-Report-Rows'],
+    credentials: false,
+    maxAge: 600,
+  });
 };
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+
+app.use(cors(corsDelegate));
+app.options('*', cors(corsDelegate));
 
 app.use(compression());
 app.use(express.json({ limit: '256kb' }));
