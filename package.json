@@ -2,6 +2,7 @@
   "name": "trendyol-analitik-paneli",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Trendyol mağazası için ürün bazlı günlük satış, iptal/iade ve net ciro raporlama uygulaması",
   "scripts": {
     "install:all": "npm --prefix server install && npm --prefix client install",

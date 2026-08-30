@@ -1,4 +1,21 @@
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000').replace(/\/+$/, '');
+/**
+ * API TABAN ADRESI
+ * -----------------------------------------------------------------------------
+ * Uretimde (Vercel) frontend ve API AYNI alan adinda calisir; bu yuzden taban
+ * adres BOS birakilir ve istekler "/api/..." seklinde GORECELI gider.
+ *
+ * VITE_API_BASE_URL tanimli degilse:
+ *   - tarayicida  -> '' (ayni alan adi; Vercel dagitimi icin dogru olan budur)
+ *   - aksi halde  -> http://localhost:4000 (yerel gelistirme)
+ *
+ * Onceden burada kosulsuz 'http://localhost:4000' varsayilani vardi: Vercel'e
+ * cikildiginda tarayici localhost'a istek atiyor ve "Sunucuya ulasilamadi"
+ * hatasi veriyordu.
+ */
+const RAW_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:4000');
+
+const BASE_URL = String(RAW_BASE_URL).replace(/\/+$/, '');
 
 /**
  * OTURUM JETONU
@@ -56,7 +73,13 @@ export class ApiError extends Error {
 }
 
 function buildUrl(path, params = {}) {
-  const url = new URL(`${BASE_URL}${path}`);
+  /**
+   * BASE_URL bos oldugunda `new URL('/api/...')` "Invalid URL" firlatir; bu
+   * yuzden goreceli adreslerde sayfanin kendi kokunu taban aliyoruz.
+   */
+  const url = BASE_URL
+    ? new URL(`${BASE_URL}${path}`)
+    : new URL(path, window.location.origin);
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
   });
